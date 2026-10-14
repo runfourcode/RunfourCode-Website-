@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Replace this with your actual admin/executive email. Keep it in sync with SRC/Admin.html.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == "YOUR_ADMIN_EMAIL@example.com";
+    }
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /clients/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /serviceRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == "pending";
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{uid}/messages/{messageId} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow create: if isAdmin() || (
+        isOwner(uid)
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderRole == "client"
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 3000
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
